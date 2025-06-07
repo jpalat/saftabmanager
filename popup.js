@@ -596,20 +596,27 @@ class PopupController {
               case 'close':
                 const closeSuccess = await this.tabManager.closeTab(tabId);
                 if (closeSuccess) {
+                  // Store references before removing the tab item
+                  const parentGroup = tabItem.closest('.duplicate-group');
+                  
+                  // Remove the tab item
                   tabItem.remove();
-                  // Update count
+                  
+                  // Update total count
                   const remainingDuplicates = this.tabsList.querySelectorAll('.duplicate-tab-item').length;
                   this.tabCount.textContent = `${remainingDuplicates} duplicate tabs`;
                   
-                  // If no duplicates left in this group, remove the group
-                  const parentGroup = tabItem.closest('.duplicate-group');
-                  const remainingInGroup = parentGroup.querySelectorAll('.duplicate-tab-item').length;
-                  if (remainingInGroup === 0) {
-                    parentGroup.remove();
+                  // Check if this group still has tabs
+                  if (parentGroup) {
+                    const remainingInGroup = parentGroup.querySelectorAll('.duplicate-tab-item').length;
+                    if (remainingInGroup === 0) {
+                      parentGroup.remove();
+                    }
                   }
                   
                   // If no groups left, return to normal view
-                  if (this.tabsList.querySelectorAll('.duplicate-group').length === 0) {
+                  const remainingGroups = this.tabsList.querySelectorAll('.duplicate-group');
+                  if (remainingGroups && remainingGroups.length === 0) {
                     this.showNotification('All duplicates removed');
                     this.filterAndSort();
                   }
