@@ -105,6 +105,23 @@ body {
   background: #e0a800;
 }
 
+.help-text {
+  font-size: 11px;
+  color: #6c757d;
+  margin-top: 8px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.help-text kbd {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-family: monospace;
+}
+
 .main {
   flex: 1;
   display: flex;
@@ -191,6 +208,12 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tab-item.keyboard-highlighted {
+  background: #fff3cd !important;
+  border-color: #ffc107 !important;
+  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
 }
 
 .tab-actions {

@@ -10,6 +10,7 @@ class PopupController {
     this.refreshBtn = document.getElementById('refreshBtn');
     this.currentSearchQuery = '';
     this.currentSort = 'title-asc';
+    this.highlightedIndex = -1; // Track highlighted tab for arrow navigation
     
     this.init();
   }
@@ -57,9 +58,35 @@ class PopupController {
       this.loadTabs();
     });
 
-    document.addEventListener('keydown', (e) => {
+    // Enhanced keyboard event handling
+    document.addEventListener('keydown', async (e) => {
       if (e.key === 'Escape') {
         window.close();
+        return;
+      }
+      
+      // Handle number keys (1-9, 0) for hotkey selection
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        const number = e.key === '0' ? 10 : parseInt(e.key); // 0 key = 10th item
+        const index = number - 1; // Convert to 0-based index
+        
+        await this.selectTabByIndex(index);
+        return;
+      }
+      
+      // Handle arrow key navigation
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        this.navigateWithArrows(e.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      
+      // Handle Enter to select highlighted tab
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        await this.selectHighlightedTab();
+        return;
       }
     });
   }
@@ -121,6 +148,7 @@ class PopupController {
       });
       
       let html = '';
+      let tabIndex = 0; // Track tab index for hotkeys
       
       if (windowIds.length > 1) {
         windowIds.forEach(windowId => {
@@ -129,11 +157,11 @@ class PopupController {
           
           html += `<div class="window-group">
             <div class="window-header">Window ${windowId} (${windowTabs.length} tabs)</div>
-            ${windowTabs.map(tab => this.createTabHTML(tab)).join('')}
+            ${windowTabs.map(tab => this.createTabHTML(tab, tabIndex++)).join('')}
           </div>`;
         });
       } else {
-        html = tabs.map(tab => this.createTabHTML(tab)).join('');
+        html = tabs.map(tab => this.createTabHTML(tab, tabIndex++)).join('');
       }
 
       this.tabsList.innerHTML = html;
@@ -145,7 +173,7 @@ class PopupController {
     }
   }
 
-  createTabHTML(tab) {
+  createTabHTML(tab, index) {
     // More robust favicon handling - NO inline event handlers
     let favicon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTggMkMxMS4zIDIgMTQgNC43IDE0IDhTMTEuMyAxNCA4IDE0IDIgMTEuMyAyIDggNC43IDIgOCAyWiIgZmlsbD0iI0Y1RjVGNSIvPgo8L3N2Zz4K';
     
@@ -158,8 +186,12 @@ class PopupController {
     const isActive = tab.active ? 'active' : '';
     const isPinned = tab.pinned ? 'pinned' : '';
     
+    // Show hotkey indicator for first 10 items
+    const hotkeyNumber = index < 10 ? (index + 1) % 10 : null; // 1-9, then 0 for 10th
+    const hotkeyDisplay = hotkeyNumber !== null ? `<span class="hotkey-indicator">${hotkeyNumber}</span>` : '';
+    
     return `
-      <div class="tab-item ${isActive} ${isPinned}" data-tab-id="${tab.id}">
+      <div class="tab-item ${isActive} ${isPinned}" data-tab-id="${tab.id}" data-index="${index}">
         <div class="tab-favicon">
           <img src="${favicon}" alt="" data-tab-favicon />
         </div>
@@ -167,6 +199,7 @@ class PopupController {
           <div class="tab-title" title="${title}">${title}</div>
           <div class="tab-url" title="${url}">${this.formatUrl(url)}</div>
         </div>
+        ${hotkeyDisplay}
         <div class="tab-actions">
           <button class="tab-action pin" data-action="pin" title="${tab.pinned ? 'Unpin' : 'Pin'}">
             ${tab.pinned ? '📌' : '📍'}
@@ -327,6 +360,74 @@ class PopupController {
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
     };
+  }
+
+  // Hotkey selection methods
+  async selectTabByIndex(index) {
+    const tabItems = this.tabsList.querySelectorAll('.tab-item');
+    if (index >= 0 && index < tabItems.length && index < 10) {
+      const tabItem = tabItems[index];
+      const tabId = parseInt(tabItem.dataset.tabId);
+      
+      try {
+        const success = await this.tabManager.switchToTab(tabId);
+        if (success) {
+          window.close();
+        } else {
+          this.showNotification('Failed to switch to tab', 'error');
+        }
+      } catch (error) {
+        console.error('Error switching tab via hotkey:', error);
+        this.showNotification('Error switching to tab', 'error');
+      }
+    }
+  }
+
+  navigateWithArrows(direction) {
+    const tabItems = this.tabsList.querySelectorAll('.tab-item');
+    if (tabItems.length === 0) return;
+
+    // Remove previous highlight
+    const previousHighlighted = this.tabsList.querySelector('.tab-item.keyboard-highlighted');
+    if (previousHighlighted) {
+      previousHighlighted.classList.remove('keyboard-highlighted');
+    }
+
+    // Calculate new index
+    this.highlightedIndex += direction;
+    
+    // Wrap around
+    if (this.highlightedIndex >= tabItems.length) {
+      this.highlightedIndex = 0;
+    } else if (this.highlightedIndex < 0) {
+      this.highlightedIndex = tabItems.length - 1;
+    }
+
+    // Highlight new item
+    const newHighlighted = tabItems[this.highlightedIndex];
+    newHighlighted.classList.add('keyboard-highlighted');
+    
+    // Scroll into view
+    newHighlighted.scrollIntoView({ block: 'nearest' });
+  }
+
+  async selectHighlightedTab() {
+    const highlighted = this.tabsList.querySelector('.tab-item.keyboard-highlighted');
+    if (highlighted) {
+      const tabId = parseInt(highlighted.dataset.tabId);
+      
+      try {
+        const success = await this.tabManager.switchToTab(tabId);
+        if (success) {
+          window.close();
+        } else {
+          this.showNotification('Failed to switch to tab', 'error');
+        }
+      } catch (error) {
+        console.error('Error switching highlighted tab:', error);
+        this.showNotification('Error switching to tab', 'error');
+      }
+    }
   }
 }
 

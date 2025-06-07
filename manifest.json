@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "SafTab Manager",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Cross-browser tab management extension with filtering and sorting capabilities",
   "permissions": [
     "tabs"
