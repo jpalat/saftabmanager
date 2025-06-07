@@ -41,16 +41,15 @@ class PopupController {
 
     this.closeDuplicatesBtn.addEventListener('click', async () => {
       try {
-        const count = await this.tabManager.closeDuplicateTabs();
-        if (count > 0) {
-          this.showNotification(`Closed ${count} duplicate tabs`);
-          await this.loadTabs();
+        const duplicates = this.tabManager.getDuplicateTabs();
+        if (duplicates.length > 0) {
+          this.showDuplicates(duplicates);
         } else {
           this.showNotification('No duplicate tabs found');
         }
       } catch (error) {
-        console.error('Error closing duplicates:', error);
-        this.showNotification('Error closing duplicate tabs', 'error');
+        console.error('Error finding duplicates:', error);
+        this.showNotification('Error finding duplicate tabs', 'error');
       }
     });
 
@@ -223,6 +222,25 @@ class PopupController {
         img.style.display = 'none';
       });
     });
+  }
+
+  async selectHighlightedTab() {
+    const highlighted = this.tabsList.querySelector('.tab-item.keyboard-highlighted');
+    if (highlighted) {
+      const tabId = parseInt(highlighted.dataset.tabId);
+      
+      try {
+        const success = await this.tabManager.switchToTab(tabId);
+        if (success) {
+          window.close();
+        } else {
+          this.showNotification('Failed to switch to tab', 'error');
+        }
+      } catch (error) {
+        console.error('Error switching highlighted tab:', error);
+        this.showNotification('Error switching to tab', 'error');
+      }
+    }
   }
 
   bindTabEvents() {
@@ -411,23 +429,202 @@ class PopupController {
     newHighlighted.scrollIntoView({ block: 'nearest' });
   }
 
-  async selectHighlightedTab() {
-    const highlighted = this.tabsList.querySelector('.tab-item.keyboard-highlighted');
-    if (highlighted) {
-      const tabId = parseInt(highlighted.dataset.tabId);
-      
-      try {
-        const success = await this.tabManager.switchToTab(tabId);
-        if (success) {
-          window.close();
-        } else {
-          this.showNotification('Failed to switch to tab', 'error');
-        }
-      } catch (error) {
-        console.error('Error switching highlighted tab:', error);
-        this.showNotification('Error switching to tab', 'error');
+  showDuplicates(duplicates) {
+    // Group duplicates by URL
+    const duplicateGroups = {};
+    duplicates.forEach(tab => {
+      if (!duplicateGroups[tab.url]) {
+        duplicateGroups[tab.url] = [];
       }
+      duplicateGroups[tab.url].push(tab);
+    });
+
+    // Filter out groups with only one tab
+    const actualDuplicates = Object.keys(duplicateGroups).filter(url => 
+      duplicateGroups[url].length > 1
+    );
+
+    if (actualDuplicates.length === 0) {
+      this.showNotification('No duplicate tabs found');
+      return;
     }
+
+    // Show duplicate view
+    this.showDuplicateView(duplicateGroups, actualDuplicates);
+  }
+
+  showDuplicateView(duplicateGroups, duplicateUrls) {
+    let html = `
+      <div class="duplicate-header">
+        <h3>Duplicate Tabs Found</h3>
+        <div class="duplicate-actions">
+          <button id="closeDuplicatesConfirm" class="btn btn-warning">Close All Duplicates</button>
+          <button id="backToTabsList" class="btn btn-primary">Back to All Tabs</button>
+        </div>
+      </div>
+    `;
+
+    duplicateUrls.forEach(url => {
+      const tabs = duplicateGroups[url];
+      const domain = this.formatUrl(url);
+      
+      html += `
+        <div class="duplicate-group">
+          <div class="duplicate-group-header">
+            <strong>${domain}</strong> <span class="duplicate-count">(${tabs.length} tabs)</span>
+          </div>
+          <div class="duplicate-tabs">
+            ${tabs.map((tab, index) => this.createDuplicateTabHTML(tab, index)).join('')}
+          </div>
+        </div>
+      `;
+    });
+
+    this.tabsList.innerHTML = html;
+    this.bindDuplicateEvents(duplicateGroups, duplicateUrls);
+    
+    // Update stats
+    const totalDuplicates = duplicateUrls.reduce((sum, url) => sum + duplicateGroups[url].length, 0);
+    this.tabCount.textContent = `${totalDuplicates} duplicate tabs`;
+    this.windowCount.textContent = `${duplicateUrls.length} duplicate groups`;
+  }
+
+  createDuplicateTabHTML(tab, index) {
+    let favicon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTggMkMxMS4zIDIgMTQgNC43IDE0IDhTMTEuMyAxNCA4IDE0IDIgMTEuMyAyIDggNC43IDIgOCAyWiIgZmlsbD0iI0Y1RjVGNSIvPgo8L3N2Zz4K';
+    
+    if (tab.favIconUrl && tab.favIconUrl.startsWith('http')) {
+      favicon = tab.favIconUrl;
+    }
+    
+    const title = this.escapeHtml(tab.title || 'Untitled');
+    const url = this.escapeHtml(tab.url || '');
+    const isActive = tab.active ? 'active' : '';
+    const isPinned = tab.pinned ? 'pinned' : '';
+    
+    return `
+      <div class="duplicate-tab-item ${isActive} ${isPinned}" data-tab-id="${tab.id}">
+        <div class="tab-favicon">
+          <img src="${favicon}" alt="" data-tab-favicon />
+        </div>
+        <div class="tab-info">
+          <div class="tab-title" title="${title}">${title}</div>
+          <div class="tab-url" title="${url}">Window ${tab.windowId}</div>
+        </div>
+        <div class="duplicate-tab-actions">
+          <button class="tab-action switch" data-action="switch" title="Switch to Tab">
+            👁️
+          </button>
+          <button class="tab-action close" data-action="close" title="Close This Tab">
+            ✕
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  bindDuplicateEvents(duplicateGroups, duplicateUrls) {
+    // Handle favicon errors
+    const faviconImages = this.tabsList.querySelectorAll('img[data-tab-favicon]');
+    faviconImages.forEach(img => {
+      img.addEventListener('error', () => {
+        img.style.display = 'none';
+      });
+    });
+
+    // Back to tabs list button
+    const backBtn = document.getElementById('backToTabsList');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        this.filterAndSort(); // Return to normal view
+      });
+    }
+
+    // Close all duplicates button
+    const closeAllBtn = document.getElementById('closeDuplicatesConfirm');
+    if (closeAllBtn) {
+      closeAllBtn.addEventListener('click', async () => {
+        try {
+          const count = await this.tabManager.closeDuplicateTabs();
+          this.showNotification(`Closed ${count} duplicate tabs`);
+          await this.loadTabs(); // Refresh and return to normal view
+        } catch (error) {
+          console.error('Error closing duplicates:', error);
+          this.showNotification('Error closing duplicate tabs', 'error');
+        }
+      });
+    }
+
+    // Individual tab actions
+    const duplicateTabItems = this.tabsList.querySelectorAll('.duplicate-tab-item');
+    duplicateTabItems.forEach(tabItem => {
+      const tabId = parseInt(tabItem.dataset.tabId);
+      
+      // Click to switch to tab
+      tabItem.addEventListener('click', async (e) => {
+        if (e.target.closest('.duplicate-tab-actions')) return;
+        
+        try {
+          const success = await this.tabManager.switchToTab(tabId);
+          if (success) {
+            window.close();
+          } else {
+            this.showNotification('Failed to switch to tab', 'error');
+          }
+        } catch (error) {
+          console.error('Error switching tab:', error);
+          this.showNotification('Error switching to tab', 'error');
+        }
+      });
+
+      // Action buttons
+      const actions = tabItem.querySelectorAll('.tab-action');
+      actions.forEach(action => {
+        action.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const actionType = action.dataset.action;
+          
+          try {
+            switch (actionType) {
+              case 'switch':
+                const switchSuccess = await this.tabManager.switchToTab(tabId);
+                if (switchSuccess) {
+                  window.close();
+                } else {
+                  this.showNotification('Failed to switch to tab', 'error');
+                }
+                break;
+              case 'close':
+                const closeSuccess = await this.tabManager.closeTab(tabId);
+                if (closeSuccess) {
+                  tabItem.remove();
+                  // Update count
+                  const remainingDuplicates = this.tabsList.querySelectorAll('.duplicate-tab-item').length;
+                  this.tabCount.textContent = `${remainingDuplicates} duplicate tabs`;
+                  
+                  // If no duplicates left in this group, remove the group
+                  const parentGroup = tabItem.closest('.duplicate-group');
+                  const remainingInGroup = parentGroup.querySelectorAll('.duplicate-tab-item').length;
+                  if (remainingInGroup === 0) {
+                    parentGroup.remove();
+                  }
+                  
+                  // If no groups left, return to normal view
+                  if (this.tabsList.querySelectorAll('.duplicate-group').length === 0) {
+                    this.showNotification('All duplicates removed');
+                    this.filterAndSort();
+                  }
+                } else {
+                  this.showNotification('Failed to close tab', 'error');
+                }
+                break;
+            }
+          } catch (error) {
+            console.error(`Error performing ${actionType} action:`, error);
+            this.showNotification(`Error performing ${actionType} action`, 'error');
+          }
+        });
+      });
+    });
   }
 }
 
