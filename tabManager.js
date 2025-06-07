@@ -6,16 +6,30 @@ class TabManager {
   }
 
   getBrowserAPI() {
-    // Enhanced browser detection for Edge compatibility
+    // Enhanced browser detection for cross-browser compatibility
     if (typeof browser !== 'undefined') {
-      return browser;
+      return browser; // Firefox
     } else if (typeof chrome !== 'undefined') {
-      return chrome;
+      return chrome; // Chrome/Edge
     } else {
-      // Fallback - this shouldn't happen in a proper extension context
       console.error('No browser API available');
       return null;
     }
+  }
+
+  // Promisify function for Chrome API compatibility
+  promisify(fn, context) {
+    return function(...args) {
+      return new Promise((resolve, reject) => {
+        fn.call(context, ...args, (result) => {
+          if (chrome && chrome.runtime && chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(result);
+          }
+        });
+      });
+    };
   }
 
   async getAllTabs() {
@@ -24,15 +38,31 @@ class TabManager {
         throw new Error('Browser API not available');
       }
       
-      // More robust tab querying with error handling
-      const queryOptions = {};
-      this.tabs = await this.browser.tabs.query(queryOptions);
+      let tabs;
       
-      // Ensure tabs array is valid
-      if (!Array.isArray(this.tabs)) {
-        this.tabs = [];
+      // Firefox uses native promises, Chrome might need promisification
+      if (typeof browser !== 'undefined') {
+        // Firefox - native promises
+        tabs = await this.browser.tabs.query({});
+      } else {
+        // Chrome/Edge - might need callback-based approach
+        tabs = await new Promise((resolve, reject) => {
+          this.browser.tabs.query({}, (result) => {
+            if (this.browser.runtime.lastError) {
+              reject(new Error(this.browser.runtime.lastError.message));
+            } else {
+              resolve(result);
+            }
+          });
+        });
       }
       
+      // Ensure tabs array is valid
+      if (!Array.isArray(tabs)) {
+        tabs = [];
+      }
+      
+      this.tabs = tabs;
       this.filteredTabs = [...this.tabs];
       console.log(`Found ${this.tabs.length} tabs`); // Debug logging
       return this.tabs;
@@ -76,7 +106,7 @@ class TabManager {
           valueB = (b.url || '').toLowerCase();
           break;
         case 'lastAccessed':
-          // Edge might not support lastAccessed - use id as fallback
+          // Firefox might not support lastAccessed - use id as fallback
           valueA = a.lastAccessed || a.id || 0;
           valueB = b.lastAccessed || b.id || 0;
           break;
@@ -101,18 +131,56 @@ class TabManager {
     try {
       if (!this.browser) return false;
       
-      await this.browser.tabs.update(tabId, { active: true });
-      const tab = await this.browser.tabs.get(tabId);
-      
-      // Edge might handle window focusing differently
-      if (tab && tab.windowId) {
-        try {
-          await this.browser.windows.update(tab.windowId, { focused: true });
-        } catch (windowError) {
-          console.warn('Could not focus window:', windowError);
-          // Continue anyway - tab switching might still work
+      if (typeof browser !== 'undefined') {
+        // Firefox - native promises
+        await this.browser.tabs.update(tabId, { active: true });
+        const tab = await this.browser.tabs.get(tabId);
+        if (tab && tab.windowId) {
+          try {
+            await this.browser.windows.update(tab.windowId, { focused: true });
+          } catch (windowError) {
+            console.warn('Could not focus window:', windowError);
+          }
+        }
+      } else {
+        // Chrome/Edge - callback-based
+        await new Promise((resolve, reject) => {
+          this.browser.tabs.update(tabId, { active: true }, () => {
+            if (this.browser.runtime.lastError) {
+              reject(new Error(this.browser.runtime.lastError.message));
+            } else {
+              resolve();
+            }
+          });
+        });
+        
+        const tab = await new Promise((resolve, reject) => {
+          this.browser.tabs.get(tabId, (result) => {
+            if (this.browser.runtime.lastError) {
+              reject(new Error(this.browser.runtime.lastError.message));
+            } else {
+              resolve(result);
+            }
+          });
+        });
+        
+        if (tab && tab.windowId) {
+          try {
+            await new Promise((resolve, reject) => {
+              this.browser.windows.update(tab.windowId, { focused: true }, () => {
+                if (this.browser.runtime.lastError) {
+                  reject(new Error(this.browser.runtime.lastError.message));
+                } else {
+                  resolve();
+                }
+              });
+            });
+          } catch (windowError) {
+            console.warn('Could not focus window:', windowError);
+          }
         }
       }
+      
       return true;
     } catch (error) {
       console.error('Error switching to tab:', error);
@@ -124,7 +192,22 @@ class TabManager {
     try {
       if (!this.browser) return false;
       
-      await this.browser.tabs.remove(tabId);
+      if (typeof browser !== 'undefined') {
+        // Firefox - native promises
+        await this.browser.tabs.remove(tabId);
+      } else {
+        // Chrome/Edge - callback-based
+        await new Promise((resolve, reject) => {
+          this.browser.tabs.remove(tabId, () => {
+            if (this.browser.runtime.lastError) {
+              reject(new Error(this.browser.runtime.lastError.message));
+            } else {
+              resolve();
+            }
+          });
+        });
+      }
+      
       this.tabs = this.tabs.filter(tab => tab.id !== tabId);
       this.filteredTabs = this.filteredTabs.filter(tab => tab.id !== tabId);
       return true;
@@ -141,10 +224,29 @@ class TabManager {
       const tab = this.tabs.find(t => t.id === tabId);
       if (!tab) return false;
       
-      const newTab = await this.browser.tabs.create({
-        url: tab.url,
-        windowId: tab.windowId
-      });
+      let newTab;
+      
+      if (typeof browser !== 'undefined') {
+        // Firefox - native promises
+        newTab = await this.browser.tabs.create({
+          url: tab.url,
+          windowId: tab.windowId
+        });
+      } else {
+        // Chrome/Edge - callback-based
+        newTab = await new Promise((resolve, reject) => {
+          this.browser.tabs.create({
+            url: tab.url,
+            windowId: tab.windowId
+          }, (result) => {
+            if (this.browser.runtime.lastError) {
+              reject(new Error(this.browser.runtime.lastError.message));
+            } else {
+              resolve(result);
+            }
+          });
+        });
+      }
       
       await this.getAllTabs();
       return newTab;
@@ -161,7 +263,22 @@ class TabManager {
       const tab = this.tabs.find(t => t.id === tabId);
       if (!tab) return false;
       
-      await this.browser.tabs.update(tabId, { pinned: !tab.pinned });
+      if (typeof browser !== 'undefined') {
+        // Firefox - native promises
+        await this.browser.tabs.update(tabId, { pinned: !tab.pinned });
+      } else {
+        // Chrome/Edge - callback-based
+        await new Promise((resolve, reject) => {
+          this.browser.tabs.update(tabId, { pinned: !tab.pinned }, () => {
+            if (this.browser.runtime.lastError) {
+              reject(new Error(this.browser.runtime.lastError.message));
+            } else {
+              resolve();
+            }
+          });
+        });
+      }
+      
       await this.getAllTabs();
       return true;
     } catch (error) {
@@ -220,7 +337,22 @@ class TabManager {
       try {
         if (!this.browser) return 0;
         
-        await this.browser.tabs.remove(tabsToClose);
+        if (typeof browser !== 'undefined') {
+          // Firefox - native promises
+          await this.browser.tabs.remove(tabsToClose);
+        } else {
+          // Chrome/Edge - callback-based
+          await new Promise((resolve, reject) => {
+            this.browser.tabs.remove(tabsToClose, () => {
+              if (this.browser.runtime.lastError) {
+                reject(new Error(this.browser.runtime.lastError.message));
+              } else {
+                resolve();
+              }
+            });
+          });
+        }
+        
         await this.getAllTabs();
         return tabsToClose.length;
       } catch (error) {
