@@ -1,12 +1,13 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "SafTab Manager",
-  "version": "0.0.7",
+  "version": "0.0.9",
   "description": "Cross-browser tab management extension with filtering and sorting capabilities",
   "permissions": [
-    "tabs"
+    "tabs",
+    "activeTab"
   ],
-  "browser_action": {
+  "action": {
     "default_popup": "popup.html",
     "default_title": "SafTab Manager",
     "default_icon": {
@@ -17,20 +18,31 @@
     }
   },
   "background": {
-    "scripts": ["background.js"],
-    "persistent": false
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+G",
+        "mac": "Command+G"
+      },
+      "description": "Open SafTab Manager"
+    },
+    "open_popup": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+G",
+        "mac": "Command+Shift+G"
+      },
+      "description": "Open SafTab Manager (alternative)"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
   },
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
-  },
-  "content_security_policy": "script-src 'self'; object-src 'self'",
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "saftab-manager@example.com",
-      "strict_min_version": "109.0"
-    }
   }
 }
