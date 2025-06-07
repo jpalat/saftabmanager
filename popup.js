@@ -138,6 +138,7 @@ class PopupController {
 
       this.tabsList.innerHTML = html;
       this.bindTabEvents();
+      this.bindFaviconEvents(); // Add this to handle favicon errors
     } catch (error) {
       console.error('Error rendering tabs:', error);
       this.showError('Error displaying tabs');
@@ -145,7 +146,7 @@ class PopupController {
   }
 
   createTabHTML(tab) {
-    // More robust favicon handling
+    // More robust favicon handling - NO inline event handlers
     let favicon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTggMkMxMS4zIDIgMTQgNC43IDE0IDhTMTEuMyAxNCA4IDE0IDIgMTEuMyAyIDggNC43IDIgOCAyWiIgZmlsbD0iI0Y1RjVGNSIvPgo8L3N2Zz4K';
     
     if (tab.favIconUrl && tab.favIconUrl.startsWith('http')) {
@@ -160,7 +161,7 @@ class PopupController {
     return `
       <div class="tab-item ${isActive} ${isPinned}" data-tab-id="${tab.id}">
         <div class="tab-favicon">
-          <img src="${favicon}" alt="" onerror="this.style.display='none'" />
+          <img src="${favicon}" alt="" data-tab-favicon />
         </div>
         <div class="tab-info">
           <div class="tab-title" title="${title}">${title}</div>
@@ -179,6 +180,16 @@ class PopupController {
         </div>
       </div>
     `;
+  }
+
+  bindFaviconEvents() {
+    // Handle favicon loading errors without inline handlers
+    const faviconImages = this.tabsList.querySelectorAll('img[data-tab-favicon]');
+    faviconImages.forEach(img => {
+      img.addEventListener('error', () => {
+        img.style.display = 'none';
+      });
+    });
   }
 
   bindTabEvents() {
