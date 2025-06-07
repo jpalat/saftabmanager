@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SafTab Manager</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>SafTab Manager</h1>
+      <div class="controls">
+        <input type="text" id="searchInput" placeholder="Search tabs..." />
+        <select id="sortSelect">
+          <option value="title-asc">Title A-Z</option>
+          <option value="title-desc">Title Z-A</option>
+          <option value="url-asc">URL A-Z</option>
+          <option value="url-desc">URL Z-A</option>
+          <option value="lastAccessed-desc">Recently Used</option>
+          <option value="windowId-asc">By Window</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button id="closeDuplicatesBtn" class="btn btn-warning">Close Duplicates</button>
+        <button id="refreshBtn" class="btn btn-primary">Refresh</button>
+      </div>
+    </header>
+    
+    <main class="main">
+      <div id="tabStats" class="stats">
+        <span id="tabCount">0 tabs</span>
+        <span id="windowCount">0 windows</span>
+      </div>
+      
+      <div id="tabsList" class="tabs-list">
+        <!-- Tabs will be dynamically inserted here -->
+      </div>
+    </main>
+  </div>
+  
+  <script src="tabManager.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
