@@ -15,9 +15,16 @@ class PopupController {
   }
 
   async init() {
+    console.log('Initializing PopupController'); // Debug logging
     this.showLoading();
     this.bindEvents();
-    await this.loadTabs();
+    
+    try {
+      await this.loadTabs();
+    } catch (error) {
+      console.error('Failed to initialize popup:', error);
+      this.showError('Failed to load tabs. Please try refreshing.');
+    }
   }
 
   bindEvents() {
@@ -32,12 +39,17 @@ class PopupController {
     });
 
     this.closeDuplicatesBtn.addEventListener('click', async () => {
-      const count = await this.tabManager.closeDuplicateTabs();
-      if (count > 0) {
-        this.showNotification(`Closed ${count} duplicate tabs`);
-        await this.loadTabs();
-      } else {
-        this.showNotification('No duplicate tabs found');
+      try {
+        const count = await this.tabManager.closeDuplicateTabs();
+        if (count > 0) {
+          this.showNotification(`Closed ${count} duplicate tabs`);
+          await this.loadTabs();
+        } else {
+          this.showNotification('No duplicate tabs found');
+        }
+      } catch (error) {
+        console.error('Error closing duplicates:', error);
+        this.showNotification('Error closing duplicate tabs', 'error');
       }
     });
 
@@ -53,18 +65,38 @@ class PopupController {
   }
 
   async loadTabs() {
+    console.log('Loading tabs...'); // Debug logging
     this.showLoading();
-    await this.tabManager.getAllTabs();
-    this.filterAndSort();
+    
+    try {
+      const tabs = await this.tabManager.getAllTabs();
+      console.log('Loaded tabs:', tabs.length); // Debug logging
+      
+      if (tabs.length === 0) {
+        console.warn('No tabs returned from TabManager');
+      }
+      
+      this.filterAndSort();
+    } catch (error) {
+      console.error('Error loading tabs:', error);
+      this.showError('Failed to load tabs. Please check permissions.');
+    }
   }
 
   filterAndSort() {
-    const filteredTabs = this.tabManager.filterTabs(this.currentSearchQuery);
-    const [sortBy, order] = this.currentSort.split('-');
-    const sortedTabs = this.tabManager.sortTabs(sortBy, order);
-    
-    this.updateStats(sortedTabs);
-    this.renderTabs(sortedTabs);
+    try {
+      const filteredTabs = this.tabManager.filterTabs(this.currentSearchQuery);
+      const [sortBy, order] = this.currentSort.split('-');
+      const sortedTabs = this.tabManager.sortTabs(sortBy, order);
+      
+      console.log('Filtered and sorted tabs:', sortedTabs.length); // Debug logging
+      
+      this.updateStats(sortedTabs);
+      this.renderTabs(sortedTabs);
+    } catch (error) {
+      console.error('Error filtering/sorting tabs:', error);
+      this.showError('Error processing tabs');
+    }
   }
 
   updateStats(tabs) {
@@ -79,31 +111,47 @@ class PopupController {
       return;
     }
 
-    const windowGroups = this.tabManager.getTabsByWindow();
-    const windowIds = Object.keys(windowGroups).sort((a, b) => parseInt(a) - parseInt(b));
-    
-    let html = '';
-    
-    if (windowIds.length > 1) {
-      windowIds.forEach(windowId => {
-        const windowTabs = windowGroups[windowId];
-        if (windowTabs.length === 0) return;
-        
-        html += `<div class="window-group">
-          <div class="window-header">Window ${windowId} (${windowTabs.length} tabs)</div>
-          ${windowTabs.map(tab => this.createTabHTML(tab)).join('')}
-        </div>`;
+    try {
+      const windowGroups = this.tabManager.getTabsByWindow();
+      const windowIds = Object.keys(windowGroups).sort((a, b) => {
+        // Handle potential non-numeric window IDs
+        const aNum = parseInt(a) || 0;
+        const bNum = parseInt(b) || 0;
+        return aNum - bNum;
       });
-    } else {
-      html = tabs.map(tab => this.createTabHTML(tab)).join('');
-    }
+      
+      let html = '';
+      
+      if (windowIds.length > 1) {
+        windowIds.forEach(windowId => {
+          const windowTabs = windowGroups[windowId];
+          if (windowTabs.length === 0) return;
+          
+          html += `<div class="window-group">
+            <div class="window-header">Window ${windowId} (${windowTabs.length} tabs)</div>
+            ${windowTabs.map(tab => this.createTabHTML(tab)).join('')}
+          </div>`;
+        });
+      } else {
+        html = tabs.map(tab => this.createTabHTML(tab)).join('');
+      }
 
-    this.tabsList.innerHTML = html;
-    this.bindTabEvents();
+      this.tabsList.innerHTML = html;
+      this.bindTabEvents();
+    } catch (error) {
+      console.error('Error rendering tabs:', error);
+      this.showError('Error displaying tabs');
+    }
   }
 
   createTabHTML(tab) {
-    const favicon = tab.favIconUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTggMkMxMS4zIDIgMTQgNC43IDE0IDhTMTEuMyAxNCA4IDE0IDIgMTEuMyAyIDggNC43IDIgOCAyWiIgZmlsbD0iI0Y1RjVGNSIvPgo8L3N2Zz4K';
+    // More robust favicon handling
+    let favicon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTggMkMxMS4zIDIgMTQgNC43IDE0IDhTMTEuMyAxNCA4IDE0IDIgMTEuMyAyIDggNC43IDIgOCAyWiIgZmlsbD0iI0Y1RjVGNSIvPgo8L3N2Zz4K';
+    
+    if (tab.favIconUrl && tab.favIconUrl.startsWith('http')) {
+      favicon = tab.favIconUrl;
+    }
+    
     const title = this.escapeHtml(tab.title || 'Untitled');
     const url = this.escapeHtml(tab.url || '');
     const isActive = tab.active ? 'active' : '';
@@ -142,8 +190,17 @@ class PopupController {
       tabItem.addEventListener('click', async (e) => {
         if (e.target.closest('.tab-actions')) return;
         
-        await this.tabManager.switchToTab(tabId);
-        window.close();
+        try {
+          const success = await this.tabManager.switchToTab(tabId);
+          if (success) {
+            window.close();
+          } else {
+            this.showNotification('Failed to switch to tab', 'error');
+          }
+        } catch (error) {
+          console.error('Error switching tab:', error);
+          this.showNotification('Error switching to tab', 'error');
+        }
       });
 
       const actions = tabItem.querySelectorAll('.tab-action');
@@ -152,20 +209,29 @@ class PopupController {
           e.stopPropagation();
           const actionType = action.dataset.action;
           
-          switch (actionType) {
-            case 'close':
-              await this.tabManager.closeTab(tabId);
-              tabItem.remove();
-              this.updateStatsFromDOM();
-              break;
-            case 'pin':
-              await this.tabManager.pinTab(tabId);
-              await this.loadTabs();
-              break;
-            case 'duplicate':
-              await this.tabManager.duplicateTab(tabId);
-              await this.loadTabs();
-              break;
+          try {
+            switch (actionType) {
+              case 'close':
+                const closeSuccess = await this.tabManager.closeTab(tabId);
+                if (closeSuccess) {
+                  tabItem.remove();
+                  this.updateStatsFromDOM();
+                } else {
+                  this.showNotification('Failed to close tab', 'error');
+                }
+                break;
+              case 'pin':
+                await this.tabManager.pinTab(tabId);
+                await this.loadTabs();
+                break;
+              case 'duplicate':
+                await this.tabManager.duplicateTab(tabId);
+                await this.loadTabs();
+                break;
+            }
+          } catch (error) {
+            console.error(`Error performing ${actionType} action:`, error);
+            this.showNotification(`Error performing ${actionType} action`, 'error');
           }
         });
       });
@@ -195,14 +261,21 @@ class PopupController {
     this.tabsList.innerHTML = `<div class="empty-state">${message}</div>`;
   }
 
-  showNotification(message) {
+  showError(message) {
+    this.tabsList.innerHTML = `<div class="empty-state" style="color: #dc3545;">${message}</div>`;
+  }
+
+  showNotification(message, type = 'success') {
     const notification = document.createElement('div');
     notification.textContent = message;
+    
+    const backgroundColor = type === 'error' ? '#dc3545' : '#28a745';
+    
     notification.style.cssText = `
       position: fixed;
       top: 10px;
       right: 10px;
-      background: #28a745;
+      background: ${backgroundColor};
       color: white;
       padding: 8px 16px;
       border-radius: 4px;
@@ -246,8 +319,15 @@ class PopupController {
   }
 }
 
+// Enhanced initialization with error handling
 document.addEventListener('DOMContentLoaded', () => {
-  new PopupController();
+  try {
+    console.log('DOM loaded, initializing PopupController');
+    new PopupController();
+  } catch (error) {
+    console.error('Failed to initialize PopupController:', error);
+    document.body.innerHTML = '<div style="padding: 20px; color: red;">Failed to initialize extension</div>';
+  }
 });
 
 const css = `

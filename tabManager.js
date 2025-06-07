@@ -6,19 +6,40 @@ class TabManager {
   }
 
   getBrowserAPI() {
+    // Enhanced browser detection for Edge compatibility
     if (typeof browser !== 'undefined') {
       return browser;
+    } else if (typeof chrome !== 'undefined') {
+      return chrome;
+    } else {
+      // Fallback - this shouldn't happen in a proper extension context
+      console.error('No browser API available');
+      return null;
     }
-    return chrome;
   }
 
   async getAllTabs() {
     try {
-      this.tabs = await this.browser.tabs.query({});
+      if (!this.browser) {
+        throw new Error('Browser API not available');
+      }
+      
+      // More robust tab querying with error handling
+      const queryOptions = {};
+      this.tabs = await this.browser.tabs.query(queryOptions);
+      
+      // Ensure tabs array is valid
+      if (!Array.isArray(this.tabs)) {
+        this.tabs = [];
+      }
+      
       this.filteredTabs = [...this.tabs];
+      console.log(`Found ${this.tabs.length} tabs`); // Debug logging
       return this.tabs;
     } catch (error) {
       console.error('Error fetching tabs:', error);
+      this.tabs = [];
+      this.filteredTabs = [];
       return [];
     }
   }
@@ -55,8 +76,9 @@ class TabManager {
           valueB = (b.url || '').toLowerCase();
           break;
         case 'lastAccessed':
-          valueA = a.lastAccessed || 0;
-          valueB = b.lastAccessed || 0;
+          // Edge might not support lastAccessed - use id as fallback
+          valueA = a.lastAccessed || a.id || 0;
+          valueB = b.lastAccessed || b.id || 0;
           break;
         case 'windowId':
           valueA = a.windowId || 0;
@@ -77,9 +99,20 @@ class TabManager {
 
   async switchToTab(tabId) {
     try {
+      if (!this.browser) return false;
+      
       await this.browser.tabs.update(tabId, { active: true });
       const tab = await this.browser.tabs.get(tabId);
-      await this.browser.windows.update(tab.windowId, { focused: true });
+      
+      // Edge might handle window focusing differently
+      if (tab && tab.windowId) {
+        try {
+          await this.browser.windows.update(tab.windowId, { focused: true });
+        } catch (windowError) {
+          console.warn('Could not focus window:', windowError);
+          // Continue anyway - tab switching might still work
+        }
+      }
       return true;
     } catch (error) {
       console.error('Error switching to tab:', error);
@@ -89,6 +122,8 @@ class TabManager {
 
   async closeTab(tabId) {
     try {
+      if (!this.browser) return false;
+      
       await this.browser.tabs.remove(tabId);
       this.tabs = this.tabs.filter(tab => tab.id !== tabId);
       this.filteredTabs = this.filteredTabs.filter(tab => tab.id !== tabId);
@@ -101,6 +136,8 @@ class TabManager {
 
   async duplicateTab(tabId) {
     try {
+      if (!this.browser) return false;
+      
       const tab = this.tabs.find(t => t.id === tabId);
       if (!tab) return false;
       
@@ -119,6 +156,8 @@ class TabManager {
 
   async pinTab(tabId) {
     try {
+      if (!this.browser) return false;
+      
       const tab = this.tabs.find(t => t.id === tabId);
       if (!tab) return false;
       
@@ -134,10 +173,11 @@ class TabManager {
   getTabsByWindow() {
     const windowGroups = {};
     this.filteredTabs.forEach(tab => {
-      if (!windowGroups[tab.windowId]) {
-        windowGroups[tab.windowId] = [];
+      const windowId = tab.windowId || 'unknown';
+      if (!windowGroups[windowId]) {
+        windowGroups[windowId] = [];
       }
-      windowGroups[tab.windowId].push(tab);
+      windowGroups[windowId].push(tab);
     });
     return windowGroups;
   }
@@ -178,6 +218,8 @@ class TabManager {
     
     if (tabsToClose.length > 0) {
       try {
+        if (!this.browser) return 0;
+        
         await this.browser.tabs.remove(tabsToClose);
         await this.getAllTabs();
         return tabsToClose.length;
