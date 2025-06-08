@@ -8,9 +8,11 @@ class PopupController {
     this.windowCount = document.getElementById('windowCount');
     this.closeDuplicatesBtn = document.getElementById('closeDuplicatesBtn');
     this.refreshBtn = document.getElementById('refreshBtn');
+    this.viewToggleBtn = document.getElementById('viewToggleBtn');
     this.currentSearchQuery = '';
     this.currentSort = 'title-asc';
     this.highlightedIndex = -1; // Track highlighted tab for arrow navigation
+    this.isFlatView = false; // Track current view mode
     
     this.init();
   }
@@ -55,6 +57,12 @@ class PopupController {
 
     this.refreshBtn.addEventListener('click', () => {
       this.loadTabs();
+    });
+
+    this.viewToggleBtn.addEventListener('click', () => {
+      this.isFlatView = !this.isFlatView;
+      this.viewToggleBtn.textContent = this.isFlatView ? 'Window View' : 'Flat View';
+      this.filterAndSort();
     });
 
     // Enhanced keyboard event handling
@@ -138,32 +146,46 @@ class PopupController {
     }
 
     try {
-      const windowGroups = this.tabManager.getTabsByWindow();
-      const windowIds = Object.keys(windowGroups).sort((a, b) => {
-        // Handle potential non-numeric window IDs
-        const aNum = parseInt(a) || 0;
-        const bNum = parseInt(b) || 0;
-        return aNum - bNum;
-      });
-      
       let html = '';
       let tabIndex = 0; // Track tab index for hotkeys
       
-      if (windowIds.length > 1) {
-        windowIds.forEach(windowId => {
-          const windowTabs = windowGroups[windowId];
-          if (windowTabs.length === 0) return;
-          
-          html += `<div class="window-group">
-            <div class="window-header">Window ${windowId} (${windowTabs.length} tabs)</div>
-            ${windowTabs.map(tab => this.createTabHTML(tab, tabIndex++)).join('')}
-          </div>`;
-        });
-      } else {
+      if (this.isFlatView) {
+        // Flat view - show all tabs without window grouping
         html = tabs.map(tab => this.createTabHTML(tab, tabIndex++)).join('');
+      } else {
+        // Window-grouped view (original behavior)
+        const windowGroups = this.tabManager.getTabsByWindow();
+        const windowIds = Object.keys(windowGroups).sort((a, b) => {
+          // Handle potential non-numeric window IDs
+          const aNum = parseInt(a) || 0;
+          const bNum = parseInt(b) || 0;
+          return aNum - bNum;
+        });
+        
+        if (windowIds.length > 1) {
+          windowIds.forEach(windowId => {
+            const windowTabs = windowGroups[windowId];
+            if (windowTabs.length === 0) return;
+            
+            html += `<div class="window-group">
+              <div class="window-header">Window ${windowId} (${windowTabs.length} tabs)</div>
+              ${windowTabs.map(tab => this.createTabHTML(tab, tabIndex++)).join('')}
+            </div>`;
+          });
+        } else {
+          html = tabs.map(tab => this.createTabHTML(tab, tabIndex++)).join('');
+        }
       }
 
       this.tabsList.innerHTML = html;
+      
+      // Apply flat-view class to container for CSS styling
+      if (this.isFlatView) {
+        this.tabsList.classList.add('flat-view');
+      } else {
+        this.tabsList.classList.remove('flat-view');
+      }
+      
       this.bindTabEvents();
       this.bindFaviconEvents(); // Add this to handle favicon errors
     } catch (error) {
@@ -196,7 +218,7 @@ class PopupController {
         </div>
         <div class="tab-info">
           <div class="tab-title" title="${title}">${title}</div>
-          <div class="tab-url" title="${url}">${this.formatUrl(url)}</div>
+          <div class="tab-url" title="${url}">${this.formatUrl(url)}${this.isFlatView ? ` • Window ${tab.windowId}` : ''}</div>
         </div>
         ${hotkeyDisplay}
         <div class="tab-actions">
