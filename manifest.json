@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "SafTab Manager",
-  "version": "0.0.12",
+  "name": "Tabby",
+  "version": "0.0.14",
   "description": "Cross-browser tab management extension with filtering and sorting capabilities",
   "permissions": [
     "tabs",
@@ -9,7 +9,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "SafTab Manager",
+    "default_title": "Tabby",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
@@ -27,14 +27,14 @@
         "default": "Ctrl+G",
         "mac": "Command+G"
       },
-      "description": "Open SafTab Manager"
+      "description": "Open Tabby"
     },
     "open_popup": {
       "suggested_key": {
         "default": "Ctrl+Shift+G",
         "mac": "Command+Shift+G"
       },
-      "description": "Open SafTab Manager (alternative)"
+      "description": "Open Tabby (alternative)"
     }
   },
   "content_security_policy": {
@@ -48,7 +48,7 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "saftabmanager@qoelabs.com"
+      "id": "tabby@qoelabs.com"
     }
   }
 }
